@@ -43,6 +43,8 @@ import { NotesService } from '../../core/services/notes.service';
         <div class="section-desc">
           Export a complete <span class="mono">.json</span> with every note, folder, color and tag — re-import it anywhere and nothing is lost.
         </div>
+        <input #fileInput type="file" accept="application/json,.json"
+          (change)="handleFile($event)" style="display:none;" />
         <div class="backup-actions">
           <button class="export-btn" (click)="ns.exportNotes()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -50,7 +52,7 @@ import { NotesService } from '../../core/services/notes.service';
             </svg>
             Export backup
           </button>
-          <button class="import-btn" (click)="ns.triggerImport()">
+          <button class="import-btn" (click)="fileInput.click()">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M21 21H3"/>
             </svg>
@@ -135,5 +137,9 @@ export class SyncModalComponent {
     const ls = this.ns.lastSync();
     if (!ls) return 'Not synced yet';
     return 'Last synced ' + this.ns.timeAgo(Number(ls));
+  }
+
+  handleFile(e: Event): void {
+    this.ns.onImportFile(e);
   }
 }

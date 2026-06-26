@@ -388,6 +388,28 @@ export class NotesService {
     return '~/.local/share/christy/notes.json';
   }
 
+  // ── storage info ───────────────────────────────────────────────────────
+
+  getStorageInfo(): { noteCount: number; folderCount: number; sizeKb: number } {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) || '';
+      const sizeKb = Math.round(raw.length * 2 / 1024);
+      return { noteCount: this.liveNotes().length, folderCount: this.folders().length, sizeKb };
+    } catch { return { noteCount: 0, folderCount: 0, sizeKb: 0 }; }
+  }
+
+  viewRawData(): void {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY) || '{}';
+      const formatted = JSON.stringify(JSON.parse(raw), null, 2);
+      const blob = new Blob([formatted], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      this.flash('Opened raw data in new tab');
+    } catch { this.flash('Could not open raw data'); }
+  }
+
   // ── sync / export / import ─────────────────────────────────────────────
 
   exportNotes(): void {

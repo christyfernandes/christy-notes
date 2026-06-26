@@ -86,8 +86,15 @@ import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
     </section>
   `,
   styles: [`
-    .note-list {
+    :host {
       flex: 0 0 366px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .note-list {
+      flex: 1;
       background: var(--bg);
       border-right: 0.5px solid rgba(var(--ink), 0.08);
       display: flex; flex-direction: column;

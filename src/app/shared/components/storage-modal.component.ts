@@ -21,17 +21,38 @@ import { NotesService } from '../../core/services/notes.service';
         </div>
 
         <p class="modal-desc">
-          Christy is local-first — every note is stored on this device and never leaves it unless you export or sync.
+          Christy is local-first — every note is stored in your browser's localStorage on this device and never leaves unless you export or sync.
         </p>
 
-        <div class="path-box">{{ ns.storagePath() }}</div>
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-value">{{ info.noteCount }}</div>
+            <div class="stat-label">notes</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ info.folderCount }}</div>
+            <div class="stat-label">folders</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ info.sizeKb }} KB</div>
+            <div class="stat-label">stored</div>
+          </div>
+        </div>
+
+        <div class="path-box">Browser localStorage · <span class="mono">christy_state_v1</span></div>
         <div class="path-hint">
-          Active store · browser database key <span class="mono">christy_state_v1</span>
+          To inspect: DevTools → Application → Storage → Local Storage
         </div>
 
         <div class="modal-actions">
-          <button class="primary-btn" (click)="onReveal()">Reveal in file manager</button>
-          <button class="secondary-btn" (click)="onCopy()">Copy path</button>
+          <button class="primary-btn" (click)="onViewRaw()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            View raw data
+          </button>
+          <button class="secondary-btn" (click)="onCopy()">Copy key</button>
         </div>
 
         <button class="close-btn" (click)="ns.showStorage.set(false)">×</button>
@@ -53,22 +74,37 @@ import { NotesService } from '../../core/services/notes.service';
     .icon-badge {
       width: 36px; height: 36px; border-radius: 9px;
       background: rgba(var(--accent-rgb), 0.14); color: var(--accent);
-      display: flex; align-items: center; justify-content: center;
+      display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
     }
     .modal-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 19px; color: rgba(var(--ink), 0.94); }
-    .modal-desc { font-size: 13px; line-height: 1.55; color: rgba(var(--ink), 0.64); margin-bottom: 14px; }
-    .path-box {
-      font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px;
-      color: rgba(var(--ink), 0.86); background: var(--bg);
-      border: 0.5px solid rgba(var(--ink), 0.10); border-radius: 9px;
-      padding: 11px 13px; word-break: break-all; margin-bottom: 10px;
+    .modal-desc { font-size: 13px; line-height: 1.55; color: rgba(var(--ink), 0.64); margin-bottom: 16px; }
+
+    .stats-row {
+      display: flex; gap: 10px; margin-bottom: 14px;
     }
-    .path-hint { font-size: 12px; color: rgba(var(--ink), 0.40); margin-bottom: 18px; }
-    .mono { font-family: ui-monospace, monospace; color: rgba(var(--ink), 0.6); }
+    .stat-card {
+      flex: 1; background: var(--bg); border: 0.5px solid rgba(var(--ink), 0.10);
+      border-radius: 10px; padding: 12px; text-align: center;
+    }
+    .stat-value {
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 20px;
+      color: rgba(var(--ink), 0.92); line-height: 1.2;
+    }
+    .stat-label { font-size: 11px; color: rgba(var(--ink), 0.45); margin-top: 2px; }
+
+    .path-box {
+      font-size: 12px; color: rgba(var(--ink), 0.72); background: var(--bg);
+      border: 0.5px solid rgba(var(--ink), 0.10); border-radius: 9px;
+      padding: 10px 13px; margin-bottom: 8px;
+    }
+    .mono { font-family: ui-monospace, 'SF Mono', monospace; color: var(--accent); }
+    .path-hint { font-size: 11px; color: rgba(var(--ink), 0.38); margin-bottom: 18px; }
+
     .modal-actions { display: flex; gap: 10px; }
     .primary-btn {
       flex: 1; background: var(--accent); color: #0D0F18; border: none; border-radius: 9px;
       padding: 11px; font-weight: 600; font-size: 13px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
     }
     .secondary-btn {
       background: transparent; color: rgba(var(--ink), 0.86);
@@ -84,13 +120,15 @@ import { NotesService } from '../../core/services/notes.service';
 export class StorageModalComponent {
   ns = inject(NotesService);
 
-  onReveal() {
+  get info() { return this.ns.getStorageInfo(); }
+
+  onViewRaw(): void {
     this.ns.showStorage.set(false);
-    this.ns.flash('Opening file location… (demo)');
+    this.ns.viewRawData();
   }
 
-  onCopy() {
-    try { navigator.clipboard.writeText(this.ns.storagePath()); } catch { /**/ }
-    this.ns.flash('Path copied');
+  onCopy(): void {
+    try { navigator.clipboard.writeText('christy_state_v1'); } catch { /**/ }
+    this.ns.flash('Storage key copied');
   }
 }

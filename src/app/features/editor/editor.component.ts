@@ -159,8 +159,15 @@ const BLOCK_TYPES = [
     }
   `,
   styles: [`
+    :host {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
     .editor-wrap {
-      display: flex; flex-direction: column; height: 100%; min-height: 0;
+      display: flex; flex-direction: column; flex: 1; min-height: 0;
       background: var(--bg);
     }
 

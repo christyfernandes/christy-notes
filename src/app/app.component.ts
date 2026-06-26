@@ -183,11 +183,6 @@ import { TimeAgoPipe } from './shared/pipes/time-ago.pipe';
     @if (ns.showSync())    { <app-sync-modal /> }
     @if (ns.conflicts())   { <app-conflict-modal /> }
 
-    <!-- hidden file input for import -->
-    <input id="christy-import" type="file" accept="application/json,.json"
-      (change)="ns.onImportFile($event)"
-      style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;" />
-
     <!-- toast -->
     <app-toast />
   `,
@@ -196,7 +191,7 @@ import { TimeAgoPipe } from './shared/pipes/time-ago.pipe';
 
     /* Desktop */
     .desktop-layout { display: flex; height: 100vh; background: var(--bg); overflow: hidden; }
-    .main-pane { flex: 1; min-width: 0; background: var(--bg); }
+    .main-pane { flex: 1; min-width: 0; background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
     .empty-state {
       height: 100%; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 14px; opacity: 0.55;

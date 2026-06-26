@@ -134,11 +134,18 @@ import { COLOR_PALETTE } from '../../core/models/note.model';
     </aside>
   `,
   styles: [`
+    :host {
+      flex: 0 0 252px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
     .sidebar {
-      flex: 0 0 252px; background: var(--header);
+      flex: 1;
+      background: var(--header);
       border-right: 0.5px solid rgba(var(--ink), 0.08);
       display: flex; flex-direction: column; padding: 18px 14px;
-      height: 100%; overflow: hidden;
+      overflow: hidden;
     }
 
     .brand {
