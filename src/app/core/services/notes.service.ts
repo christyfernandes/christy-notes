@@ -4,11 +4,16 @@ import {
   COLOR_PALETTE, COLOR_KEYS,
 } from '../models/note.model';
 
-const STORAGE_KEY = 'christy_state_v1';
-const THEME_KEY   = 'christy_theme';
-const USER_KEY    = 'christy_user';
-const GDRIVE_KEY  = 'christy_gdrive';
-const SYNC_KEY    = 'christy_lastsync';
+const STORAGE_KEY      = 'christy_state_v1';
+const THEME_KEY        = 'christy_theme';
+const USER_KEY         = 'christy_user';
+const GDRIVE_KEY       = 'christy_gdrive';
+const SYNC_KEY         = 'christy_lastsync';
+const GDRIVE_EMAIL_KEY = 'christy_gdrive_email';
+const DRIVE_FILE_KEY   = 'christy_drive_fid';
+const CLIENT_ID_KEY    = 'christy_client_id';
+const AUTO_SYNC_KEY    = 'christy_auto_sync';
+const DRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.appdata';
 
 export interface ConflictState {
   list: Note[];
@@ -36,9 +41,15 @@ export class NotesService {
   readonly editingName  = signal(false);
   readonly showStorage  = signal(false);
   readonly showSync     = signal(false);
-  readonly googleConnected = signal(this.storedGdrive());
-  readonly lastSync    = signal<string>(this.storedLastSync());
-  readonly conflicts   = signal<ConflictState | null>(null);
+  readonly gDriveToken     = signal<string>('');
+  readonly gDriveEmail     = signal<string>(this.storedGDriveEmail());
+  readonly googleConnected = computed(() => !!this.gDriveEmail());
+  readonly lastSync        = signal<string>(this.storedLastSync());
+  readonly syncInProgress  = signal(false);
+  readonly driveFileId     = signal<string>(this.storedDriveFileId());
+  readonly clientId        = signal<string>(this.storedClientId());
+  readonly autoSync        = signal<boolean>(this.storedAutoSync());
+  readonly conflicts       = signal<ConflictState | null>(null);
   readonly windowWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1200);
   readonly mobileView  = signal<'list' | 'search' | 'detail' | 'editor'>('list');
 
@@ -76,6 +87,10 @@ export class NotesService {
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', () => {
         this.windowWidth.set(window.innerWidth);
+      });
+      setTimeout(() => this.autoSyncCheck(), 2500);
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) this.autoSyncCheck();
       });
     }
   }
@@ -115,12 +130,36 @@ export class NotesService {
     return 'blocks';
   }
 
-  private storedGdrive(): boolean {
-    try { return localStorage.getItem(GDRIVE_KEY) === '1'; } catch { return false; }
+  private storedGDriveEmail(): string {
+    try { return localStorage.getItem(GDRIVE_EMAIL_KEY) || ''; } catch { return ''; }
   }
 
   private storedLastSync(): string {
     try { return localStorage.getItem(SYNC_KEY) || ''; } catch { return ''; }
+  }
+
+  private storedDriveFileId(): string {
+    try { return localStorage.getItem(DRIVE_FILE_KEY) || ''; } catch { return ''; }
+  }
+
+  private storedClientId(): string {
+    try { return localStorage.getItem(CLIENT_ID_KEY) || ''; } catch { return ''; }
+  }
+
+  private storedAutoSync(): boolean {
+    try { return localStorage.getItem(AUTO_SYNC_KEY) !== '0'; } catch { return true; }
+  }
+
+  setClientId(id: string): void {
+    const v = id.trim();
+    try { localStorage.setItem(CLIENT_ID_KEY, v); } catch { /**/ }
+    this.clientId.set(v);
+  }
+
+  toggleAutoSync(): void {
+    const next = !this.autoSync();
+    try { localStorage.setItem(AUTO_SYNC_KEY, next ? '1' : '0'); } catch { /**/ }
+    this.autoSync.set(next);
   }
 
   private effectiveTheme(): 'light' | 'dark' {
@@ -503,19 +542,255 @@ export class NotesService {
     });
   }
 
-  connectGoogle(): void {
-    const next = !this.googleConnected();
-    try { localStorage.setItem(GDRIVE_KEY, next ? '1' : '0'); } catch { /**/ }
-    this.googleConnected.set(next);
-    this.flash(next ? 'Google Drive connected (demo)' : 'Google Drive disconnected');
+  // ── Google Drive sync ─────────────────────────────────────────────────
+
+  private loadGIS(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if ((window as any).google?.accounts?.oauth2) { resolve(); return; }
+      const existing = document.querySelector('script[src*="accounts.google.com/gsi"]');
+      if (existing) { existing.addEventListener('load', () => resolve()); return; }
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load Google Identity Services'));
+      document.head.appendChild(s);
+    });
   }
 
-  syncNow(): void {
-    const t = String(Date.now());
-    try { localStorage.setItem(SYNC_KEY, t); } catch { /**/ }
-    this.lastSync.set(t);
-    this.flash('Synced to Google Drive (demo)');
+  private async _fetchDriveEmail(token: string): Promise<void> {
+    try {
+      const resp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo',
+        { headers: { Authorization: `Bearer ${token}` } });
+      const u = await resp.json();
+      const email = u.email || 'Google Account';
+      try { localStorage.setItem(GDRIVE_EMAIL_KEY, email); } catch { /**/ }
+      this.gDriveEmail.set(email);
+    } catch {
+      this.gDriveEmail.set('Google Account');
+      try { localStorage.setItem(GDRIVE_EMAIL_KEY, 'Google Account'); } catch { /**/ }
+    }
   }
+
+  private async _requestDriveToken(onSuccess: () => Promise<void>): Promise<void> {
+    await this.loadGIS();
+    const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+      client_id: this.clientId(),
+      scope: DRIVE_SCOPE,
+      callback: async (resp: any) => {
+        if (resp.error) { this.flash('Google sign-in failed'); return; }
+        this.gDriveToken.set(resp.access_token);
+        if (!this.gDriveEmail()) await this._fetchDriveEmail(resp.access_token);
+        await onSuccess();
+      },
+    });
+    tokenClient.requestAccessToken();
+  }
+
+  async connectGoogleDrive(): Promise<void> {
+    if (!this.clientId()) { this.flash('Enter your Google Client ID first'); return; }
+    try {
+      await this._requestDriveToken(async () => { await this.performDriveSync(); });
+    } catch { this.flash('Could not load Google sign-in'); }
+  }
+
+  async syncNowManual(): Promise<void> {
+    if (!this.clientId()) { this.flash('Setup required — enter your Google Client ID'); return; }
+    if (!this.gDriveToken()) {
+      try {
+        await this._requestDriveToken(async () => { await this.performDriveSync(); });
+      } catch { this.flash('Could not load Google sign-in'); }
+      return;
+    }
+    await this.performDriveSync();
+  }
+
+  async restoreFromDrive(): Promise<void> {
+    if (!this.clientId()) { this.flash('Setup required — enter your Google Client ID'); return; }
+    if (!this.gDriveToken()) {
+      try {
+        await this._requestDriveToken(async () => { await this.executeRestore(); });
+      } catch { this.flash('Could not load Google sign-in'); }
+      return;
+    }
+    await this.executeRestore();
+  }
+
+  private async executeRestore(): Promise<void> {
+    this.syncInProgress.set(true);
+    try {
+      const data = await this.downloadFromDrive();
+      if (!data?.notes?.length) { this.flash('No backup found on Google Drive'); return; }
+      this.notes.set(data.notes);
+      if (data.folders?.length) this.folders.set(data.folders);
+      this.showSync.set(false);
+      this.flash(`Restored ${data.notes.length} notes from Drive`);
+    } catch { this.flash('Restore failed — check your connection'); }
+    finally { this.syncInProgress.set(false); }
+  }
+
+  async performDriveSync(showToast = true): Promise<void> {
+    if (this.syncInProgress()) return;
+    this.syncInProgress.set(true);
+    try {
+      const driveData = await this.downloadFromDrive();
+      if (driveData) this.mergeFromDrive(driveData);
+      await this.uploadToDrive();
+      const now = String(Date.now());
+      try { localStorage.setItem(SYNC_KEY, now); } catch { /**/ }
+      this.lastSync.set(now);
+      if (showToast) this.flash('Backed up to Google Drive');
+    } catch (err: any) {
+      if (err?.status === 401) {
+        this.gDriveToken.set('');
+        if (showToast) this.flash('Session expired — tap "Back up now" to reconnect');
+      } else {
+        if (showToast) this.flash('Sync failed — check your connection');
+      }
+    } finally { this.syncInProgress.set(false); }
+  }
+
+  private async uploadToDrive(): Promise<void> {
+    const token = this.gDriveToken();
+    const payload = {
+      app: 'Christy', format: 'christy-notes', version: 1,
+      syncedAt: new Date().toISOString(),
+      userName: this.userName(), folders: this.folders(), notes: this.notes(),
+    };
+    const body = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const fileId = this.driveFileId();
+
+    if (fileId) {
+      const resp = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+        { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body }
+      );
+      if (resp.status === 404) {
+        this.driveFileId.set('');
+        try { localStorage.removeItem(DRIVE_FILE_KEY); } catch { /**/ }
+        return this.uploadToDrive();
+      }
+      if (!resp.ok) throw Object.assign(new Error('Upload failed'), { status: resp.status });
+    } else {
+      const meta = JSON.stringify({ name: 'christy-notes-backup.json', parents: ['appDataFolder'] });
+      const form = new FormData();
+      form.append('metadata', new Blob([meta], { type: 'application/json' }));
+      form.append('file', body);
+      const resp = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+      );
+      if (!resp.ok) throw Object.assign(new Error('Create failed'), { status: resp.status });
+      const data = await resp.json();
+      try { localStorage.setItem(DRIVE_FILE_KEY, data.id); } catch { /**/ }
+      this.driveFileId.set(data.id);
+    }
+  }
+
+  private async downloadFromDrive(): Promise<any | null> {
+    const token = this.gDriveToken();
+    let fileId = this.driveFileId();
+
+    if (!fileId) {
+      const resp = await fetch(
+        'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22christy-notes-backup.json%22&fields=files(id)',
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!resp.ok) throw Object.assign(new Error('List failed'), { status: resp.status });
+      const list = await resp.json();
+      if (!list.files?.length) return null;
+      fileId = list.files[0].id;
+      try { localStorage.setItem(DRIVE_FILE_KEY, fileId); } catch { /**/ }
+      this.driveFileId.set(fileId);
+    }
+
+    const resp = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (resp.status === 404) {
+      this.driveFileId.set('');
+      try { localStorage.removeItem(DRIVE_FILE_KEY); } catch { /**/ }
+      return null;
+    }
+    if (!resp.ok) throw Object.assign(new Error('Download failed'), { status: resp.status });
+    return resp.json();
+  }
+
+  private mergeFromDrive(driveData: any): void {
+    const incoming: Note[] = (driveData.notes || []).filter((n: any) => !n.deleted);
+    const incFolders: Folder[] = driveData.folders || [];
+    if (!incoming.length) return;
+
+    this.notes.update(local => {
+      const localMap = new Map(local.map(n => [n.id, n]));
+      const result = [...local];
+      incoming.forEach(remote => {
+        if (localMap.has(remote.id)) {
+          const loc = localMap.get(remote.id)!;
+          if (remote.updatedAt > loc.updatedAt) {
+            const i = result.findIndex(n => n.id === remote.id);
+            if (i >= 0) result[i] = { ...remote };
+          }
+        } else {
+          result.unshift({ ...remote });
+        }
+      });
+      return result;
+    });
+
+    this.folders.update(local => {
+      const list = [...local];
+      incFolders.forEach(f => { if (!list.find(x => x.id === f.id)) list.push(f); });
+      return list;
+    });
+  }
+
+  disconnectDrive(): void {
+    try {
+      if (this.gDriveToken() && (window as any).google?.accounts?.oauth2) {
+        (window as any).google.accounts.oauth2.revoke(this.gDriveToken(), () => {});
+      }
+    } catch { /**/ }
+    this.gDriveToken.set('');
+    this.gDriveEmail.set('');
+    this.driveFileId.set('');
+    try {
+      localStorage.removeItem(GDRIVE_EMAIL_KEY);
+      localStorage.removeItem(GDRIVE_KEY);
+      localStorage.removeItem(DRIVE_FILE_KEY);
+    } catch { /**/ }
+    this.flash('Google Drive disconnected');
+  }
+
+  private autoSyncCheck(): void {
+    if (!this.googleConnected() || !this.autoSync() || !this.clientId()) return;
+    const last = Number(this.lastSync()) || 0;
+    if (Date.now() - last < 8 * 60 * 60 * 1000) return;
+    this.silentSync();
+  }
+
+  private async silentSync(): Promise<void> {
+    if (this.syncInProgress() || !this.clientId()) return;
+    try {
+      await this.loadGIS();
+      (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: this.clientId(),
+        scope: DRIVE_SCOPE,
+        prompt: '',
+        callback: async (resp: any) => {
+          if (!resp.error) {
+            this.gDriveToken.set(resp.access_token);
+            await this.performDriveSync(false);
+          }
+        },
+        error_callback: () => { /* silent fail — session expired, user will see on next manual sync */ },
+      }).requestAccessToken({ prompt: '' });
+    } catch { /* silent fail */ }
+  }
+
+  connectGoogle(): void { /* kept for any legacy references */ }
+  syncNow(): void { /* kept for any legacy references */ }
 
   // ── utility ─────────────────────────────────────────────────────────────
 
