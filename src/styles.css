@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
+
+:root {
+  --ink: 255, 255, 255;
+  --bg: #0D0F18;
+  --surface: #1C1F30;
+  --surface-1: #161927;
+  --surface-2: #242843;
+  --header: #12141F;
+  --glass: 20, 22, 33;
+  --accent: #FF9933;
+  --accent-rgb: 255, 153, 51;
+}
+
+html[data-theme='light'] {
+  --ink: 28, 31, 46;
+  --bg: #EEF1F6;
+  --surface: #FFFFFF;
+  --surface-1: #F3F5F9;
+  --surface-2: #E8EBF2;
+  --header: #FFFFFF;
+  --glass: 255, 255, 255;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Noto Sans', sans-serif;
+  color: rgba(var(--ink), 0.92);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--ink), 0.16);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(var(--ink), 0.30);
+}
+
+button {
+  font-family: 'Noto Sans', sans-serif;
+}
+
+textarea {
+  font-family: 'Noto Sans', sans-serif;
+}
+
+input {
+  font-family: 'Noto Sans', sans-serif;
+}
