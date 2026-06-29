@@ -36,6 +36,7 @@ export interface NoteBlock {
   title?: string;
   duration?: string;
   url?: string;
+  dataUrl?: string;
 }
 
 export interface Note {

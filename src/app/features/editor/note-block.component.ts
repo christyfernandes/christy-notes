@@ -1,4 +1,4 @@
-import { Component, Input, inject } from '@angular/core';
+import { Component, Input, inject, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { NoteBlock } from '../../core/models/note.model';
@@ -127,14 +127,26 @@ import { NotesService } from '../../core/services/notes.service';
 
         <!-- IMAGE -->
         @if (block.type === 'image') {
-          <div class="image-box">
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none"
-              stroke="rgba(var(--ink),0.32)" stroke-width="1.3">
-              <rect width="18" height="18" x="3" y="3" rx="2"/>
-              <circle cx="9" cy="9" r="2"/>
-              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
-            </svg>
-            <span class="image-label">Image placeholder</span>
+          <input #fileInput type="file" accept="image/*" style="display:none"
+            (change)="onFileSelected($event)" />
+          <div class="image-box" [class.has-image]="!!block.dataUrl"
+            [class.clickable]="editing" (click)="editing && fileInput.click()">
+            @if (block.dataUrl) {
+              <img class="image-preview" [src]="block.dataUrl" alt="note image" />
+              @if (editing) {
+                <button class="image-replace-btn" (click)="$event.stopPropagation(); fileInput.click()">
+                  Replace
+                </button>
+              }
+            } @else {
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none"
+                stroke="rgba(var(--ink),0.32)" stroke-width="1.3">
+                <rect width="18" height="18" x="3" y="3" rx="2"/>
+                <circle cx="9" cy="9" r="2"/>
+                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+              </svg>
+              <span class="image-label">{{ editing ? 'Click to upload image' : 'No image' }}</span>
+            }
           </div>
           @if (editing) {
             <input class="caption-input"
@@ -319,7 +331,18 @@ import { NotesService } from '../../core/services/notes.service';
       height: 170px; border-radius: 10px; background: rgba(var(--ink), 0.03);
       border: 0.5px solid rgba(var(--ink), 0.10);
       display: flex; flex-direction: column; align-items: center; justify-content: center;
+      overflow: hidden; position: relative;
     }
+    .image-box.clickable { cursor: pointer; }
+    .image-box.clickable:hover { background: rgba(var(--ink), 0.06); border-color: rgba(var(--ink), 0.22); }
+    .image-box.has-image { height: auto; min-height: 120px; max-height: 400px; }
+    .image-preview { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 10px; }
+    .image-replace-btn {
+      position: absolute; bottom: 8px; right: 8px;
+      background: rgba(0,0,0,0.55); color: #fff; border: none;
+      border-radius: 6px; font-size: 12px; padding: 4px 10px; cursor: pointer;
+    }
+    .image-replace-btn:hover { background: rgba(0,0,0,0.75); }
     .image-label { font-size: 12px; color: rgba(var(--ink), 0.40); margin-top: 8px; }
     .caption-input {
       width: 100%; margin-top: 8px; background: transparent; border: none; outline: none;
@@ -397,8 +420,33 @@ export class NoteBlockComponent {
   @Input({ required: true }) blockIndex!: number;
   @Input() editing = false;
 
+  @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
+
   ns = inject(NotesService);
 
   asInput(e: Event): HTMLInputElement { return e.target as HTMLInputElement; }
   asTextarea(e: Event): HTMLTextAreaElement { return e.target as HTMLTextAreaElement; }
+
+  onFileSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1200;
+        const scale = img.width > MAX || img.height > MAX
+          ? Math.min(MAX / img.width, MAX / img.height) : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        this.ns.updateBlock(this.noteId, this.blockIndex, { dataUrl });
+      };
+      img.src = e.target!.result as string;
+    };
+    reader.readAsDataURL(file);
+    (event.target as HTMLInputElement).value = '';
+  }
 }
